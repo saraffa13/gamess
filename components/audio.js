@@ -148,16 +148,13 @@ export const speak = async (text, lang = 'hi') => {
   try { if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; } } catch (e) {}
   try { window.speechSynthesis.cancel(); } catch (e) {}
 
-  if (recordedKeys.has(text)) {
-    const url = await fetchClipUrl(text);
-    if (url) {
-      const a = new Audio(url);
-      currentAudio = a;
-      a.play().catch(() => playTTS(text, lang));
-      return;
-    }
-  }
-  playTTS(text, lang);
+  // Only play parent-recorded clips. No TTS fallback — stay silent if not recorded.
+  if (!recordedKeys.has(text)) return;
+  const url = await fetchClipUrl(text);
+  if (!url) return;
+  const a = new Audio(url);
+  currentAudio = a;
+  a.play().catch(() => {});
 };
 
 export const cancelSpeak = () => {
