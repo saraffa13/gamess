@@ -69,6 +69,22 @@ export const CHEERS = {
   en: ['Yay Akshita!', 'Great job!', 'Wow!', 'Amazing!'],
 };
 
+// English A–Z and Hindi varnamala (vowels + main consonants).
+// Each item: e = the glyph shown, hi/en = label, text = same as glyph (used as speech key).
+export const ALPHABETS = {
+  en: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(c => ({ e: c, hi: c, en: c })),
+  hi: [
+    'अ','आ','इ','ई','उ','ऊ','ऋ','ए','ऐ','ओ','औ','अं','अः',
+    'क','ख','ग','घ','ङ',
+    'च','छ','ज','झ','ञ',
+    'ट','ठ','ड','ढ','ण',
+    'त','थ','द','ध','न',
+    'प','फ','ब','भ','म',
+    'य','र','ल','व',
+    'श','ष','स','ह',
+  ].map(c => ({ e: c, hi: c, en: c })),
+};
+
 export const NOTES = [
   { e: '🔴', f: 261.63, c: '#ff6b6b' },
   { e: '🟠', f: 293.66, c: '#ff922b' },
@@ -88,6 +104,7 @@ export const STRINGS = {
     menu: {
       animals: 'जानवर', balloons: 'गुब्बारे', colors: 'रंग', music: 'संगीत',
       numbers: 'गिनती', fruits: 'फल', vehicles: 'गाड़ियाँ', body: 'शरीर',
+      alphabet: 'वर्णमाला',
     },
     parentBtn: '🎤 अपनी आवाज़ रिकॉर्ड करें (Parent mode)',
     parentTitle: '🎤 अपनी आवाज़ रिकॉर्ड करें',
@@ -102,6 +119,7 @@ export const STRINGS = {
     menu: {
       animals: 'Animals', balloons: 'Balloons', colors: 'Colors', music: 'Music',
       numbers: 'Numbers', fruits: 'Fruits', vehicles: 'Vehicles', body: 'Body',
+      alphabet: 'Alphabet',
     },
     parentBtn: '🎤 Record your voice (Parent mode)',
     parentTitle: '🎤 Record your voice',

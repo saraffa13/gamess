@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { listClips } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const db = getDb();
-  const rows = db.prepare('SELECT key, mime, updated_at FROM clips').all();
+  const rows = await listClips();
   return NextResponse.json(rows);
 }

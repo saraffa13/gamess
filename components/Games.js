@@ -2,14 +2,14 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext, Component } from 'react';
 import {
   ANIMALS, FRUITS, VEHICLES, BODY, COLORS, NUM_WORDS, NUM_EMOJI, CHEERS, NOTES,
-  STRINGS, labelOf, sayOf,
+  ALPHABETS, STRINGS, labelOf, sayOf,
 } from './data';
 import {
   getCtx, loadVoices, loadRecordedIndex,
   speak, cancelSpeak, playTone, playPop,
   uploadClip, deleteClip, recordedKeysSnapshot,
 } from './audio';
-import { startMusic, stopMusic } from './bgMusic';
+import { startMusic, stopMusic, setMusicVolume } from './bgMusic';
 
 // ---------- Error boundary ----------
 class ErrorBoundary extends Component {
@@ -58,7 +58,7 @@ function LangToggle() {
   );
 }
 
-// ---------- Music toggle ----------
+// ---------- Music toggle + volume ----------
 function MusicToggle({ on, onToggle }) {
   return (
     <button className="music-toggle" onClick={onToggle} title={on ? 'Music on' : 'Music off'}>
@@ -66,9 +66,22 @@ function MusicToggle({ on, onToggle }) {
     </button>
   );
 }
+function VolumeSlider({ value, onChange }) {
+  return (
+    <div className="volume-wrap" title="Background music volume">
+      <span className="volume-icon">🔈</span>
+      <input
+        type="range" min="0" max="100" value={Math.round(value * 100)}
+        onChange={e => onChange(Number(e.target.value) / 100)}
+        className="volume-slider"
+      />
+      <span className="volume-icon">🔊</span>
+    </div>
+  );
+}
 
 // ---------- Home ----------
-function Home({ onPick, musicOn, onToggleMusic }) {
+function Home({ onPick, musicOn, onToggleMusic, musicVol, onVolChange }) {
   const { lang } = useLang();
   const t = STRINGS[lang];
   return (
@@ -76,6 +89,7 @@ function Home({ onPick, musicOn, onToggleMusic }) {
       <div className="home-header">
         <LangToggle />
         <MusicToggle on={musicOn} onToggle={onToggleMusic} />
+        <VolumeSlider value={musicVol} onChange={onVolChange} />
       </div>
       <h1>{t.greeting}</h1>
       <div className="menu">
@@ -87,8 +101,37 @@ function Home({ onPick, musicOn, onToggleMusic }) {
         <button className="m6" onClick={() => onPick('fruits')}><span className="emoji">🍎</span>{t.menu.fruits}</button>
         <button className="m7" onClick={() => onPick('vehicles')}><span className="emoji">🚗</span>{t.menu.vehicles}</button>
         <button className="m8" onClick={() => onPick('body')}><span className="emoji">👁️</span>{t.menu.body}</button>
+        <button className="m9" onClick={() => onPick('alphabet')}><span className="emoji">🔤</span>{t.menu.alphabet}</button>
       </div>
       <button className="parent-btn" onClick={() => onPick('parent')}>{t.parentBtn}</button>
+    </div>
+  );
+}
+
+// ---------- Alphabet ----------
+function Alphabet() {
+  const { lang } = useLang();
+  const items = ALPHABETS[lang];
+  const [picked, setPicked] = useState(null);
+  const onTap = (it) => {
+    setPicked(it);
+    speak(it.e);
+    setTimeout(() => setPicked(null), 1500);
+  };
+  return (
+    <div className="alphabet-stage">
+      <div className="alphabet-grid">
+        {items.map((it, i) => (
+          <button key={i} className="alphabet-btn" onClick={() => onTap(it)}>
+            {it.e}
+          </button>
+        ))}
+      </div>
+      {picked && (
+        <div className="big-overlay">
+          <div className="e">{picked.e}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -318,6 +361,7 @@ function buildVoiceLibrary(lang) {
         { label: STRINGS[lang].findXSay(c), emoji: '🔍', text: STRINGS[lang].findXSay(c), color: c.hex },
       ]) },
     { title: '🔢 ' + STRINGS[lang].menu.numbers,  items: NUM_WORDS[lang].slice(1).map((w, i) => ({ label: w, emoji: String(i + 1), text: w })) },
+    { title: '🔤 ' + STRINGS[lang].menu.alphabet, items: ALPHABETS[lang].map(a => ({ label: a.e, emoji: a.e, text: a.e })) },
     { title: '🌟 ' + (lang === 'hi' ? 'तारीफ़' : 'Praise'), items: CHEERS[lang].map(c => ({ label: c, emoji: '🌟', text: c })) },
   ];
 }
@@ -328,7 +372,15 @@ function ParentMode() {
   const [groups, setGroups] = useState(() => buildVoiceLibrary(lang));
   const [recordingKey, setRecordingKey] = useState(null);
   const [recorded, setRecorded] = useState(new Set());
+  const [error, setError] = useState(null);
   const mediaRef = useRef({ recorder: null, chunks: [], stream: null });
+
+  const insecure = typeof window !== 'undefined'
+    && !window.isSecureContext
+    && window.location.hostname !== 'localhost'
+    && window.location.hostname !== '127.0.0.1';
+  const noMic = typeof window !== 'undefined'
+    && !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
   useEffect(() => { setGroups(buildVoiceLibrary(lang)); }, [lang]);
   useEffect(() => {
@@ -338,6 +390,15 @@ function ParentMode() {
   const refresh = () => setRecorded(new Set(recordedKeysSnapshot()));
 
   const startRec = async (key) => {
+    setError(null);
+    if (insecure) {
+      setError('Microphone is blocked because this page is not HTTPS. Open the app via https:// (or localhost).');
+      return;
+    }
+    if (noMic) {
+      setError('navigator.mediaDevices is unavailable. Browser/secure-context limitation.');
+      return;
+    }
     try {
       if (mediaRef.current.recorder) return;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -349,7 +410,12 @@ function ParentMode() {
       rec.onstop = async () => {
         stream.getTracks().forEach(tr => tr.stop());
         const blob = new Blob(chunks, { type: mime });
-        await uploadClip(key, blob);
+        try {
+          const ok = await uploadClip(key, blob);
+          if (!ok) setError('Upload failed. Server rejected the clip (check API/storage).');
+        } catch (e) {
+          setError('Upload error: ' + (e && e.message ? e.message : e));
+        }
         mediaRef.current = { recorder: null, chunks: [], stream: null };
         setRecordingKey(null);
         refresh();
@@ -358,7 +424,7 @@ function ParentMode() {
       rec.start();
       setRecordingKey(key);
     } catch (e) {
-      alert('Microphone permission needed: ' + e.message);
+      setError('Microphone error: ' + (e && e.message ? e.message : e));
     }
   };
   const stopRec = () => {
@@ -377,6 +443,16 @@ function ParentMode() {
       </div>
       <h2 style={{ textAlign: 'center', color: '#d63384', margin: '10px 0' }}>{t.parentTitle}</h2>
       <p style={{ textAlign: 'center', color: '#666', margin: '0 0 20px', fontSize: '0.95rem' }}>{t.parentDesc}</p>
+      {(insecure || noMic) && (
+        <div style={{ background: '#fff3bf', border: '2px solid #ffd43b', borderRadius: 12, padding: 12, marginBottom: 16, fontSize: '0.9rem', color: '#5c3a00' }}>
+          ⚠️ Microphone unavailable: page is not in a secure context (HTTPS required). Recording will not work here.
+        </div>
+      )}
+      {error && (
+        <div style={{ background: '#ffe3e3', border: '2px solid #ff8787', borderRadius: 12, padding: 12, marginBottom: 16, fontSize: '0.9rem', color: '#a61e1e' }}>
+          {error}
+        </div>
+      )}
       {groups.map(g => (
         <div key={g.title} className="parent-group">
           <h3>{g.title}</h3>
@@ -410,6 +486,7 @@ export default function Games() {
   const [lang, setLangState] = useState('hi');
   const [view, setView] = useState('home');
   const [musicOn, setMusicOn] = useState(true);
+  const [musicVol, setMusicVolState] = useState(0.15);
 
   useEffect(() => {
     try {
@@ -417,6 +494,11 @@ export default function Games() {
       if (savedLang === 'hi' || savedLang === 'en') setLangState(savedLang);
       const savedMusic = localStorage.getItem('music');
       if (savedMusic === '0') setMusicOn(false);
+      const savedVol = localStorage.getItem('musicVol');
+      if (savedVol != null) {
+        const v = Number(savedVol);
+        if (!Number.isNaN(v)) { setMusicVolState(v); setMusicVolume(v); }
+      }
     } catch (e) {}
     loadRecordedIndex();
   }, []);
@@ -436,6 +518,12 @@ export default function Games() {
     });
   };
 
+  const changeVol = (v) => {
+    setMusicVolState(v);
+    setMusicVolume(v);
+    try { localStorage.setItem('musicVol', String(v)); } catch (e) {}
+  };
+
   const go = (v) => {
     getCtx();
     loadVoices();
@@ -449,7 +537,7 @@ export default function Games() {
       {view !== 'home' && (
         <button className="back" onClick={home}>🏠</button>
       )}
-      {view === 'home' && <Home onPick={go} musicOn={musicOn} onToggleMusic={toggleMusic} />}
+      {view === 'home' && <Home onPick={go} musicOn={musicOn} onToggleMusic={toggleMusic} musicVol={musicVol} onVolChange={changeVol} />}
       {view === 'animals' && <TapSpeakGrid items={ANIMALS} />}
       {view === 'fruits' && <TapSpeakGrid items={FRUITS} />}
       {view === 'vehicles' && <TapSpeakGrid items={VEHICLES} />}
@@ -458,6 +546,7 @@ export default function Games() {
       {view === 'colors' && <ColorMatch />}
       {view === 'music' && <Music />}
       {view === 'numbers' && <Numbers />}
+      {view === 'alphabet' && <Alphabet />}
       {view === 'parent' && <ErrorBoundary><ParentMode /></ErrorBoundary>}
       {view !== 'parent' && (
         <div className="voice-note">{STRINGS[lang].voiceTip}</div>

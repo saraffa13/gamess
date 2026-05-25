@@ -1,17 +1,20 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { getClip, putClip, delClip } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(_req, { params }) {
   const key = decodeURIComponent(params.key);
-  const row = getDb().prepare('SELECT mime, data FROM clips WHERE key = ?').get(key);
-  if (!row) return new NextResponse('Not found', { status: 404 });
-  return new NextResponse(row.data, {
+  const clip = await getClip(key);
+  if (!clip) return new NextResponse('Not found', { status: 404 });
+  if (clip.url) {
+    return NextResponse.redirect(clip.url);
+  }
+  return new NextResponse(clip.data, {
     headers: {
-      'Content-Type': row.mime,
+      'Content-Type': clip.mime,
       'Cache-Control': 'no-store',
-      'Content-Length': String(row.data.length),
+      'Content-Length': String(clip.data.length),
     },
   });
 }
@@ -21,17 +24,21 @@ export async function PUT(req, { params }) {
   const mime = req.headers.get('content-type') || 'audio/webm';
   const buf = Buffer.from(await req.arrayBuffer());
   if (!buf.length) return new NextResponse('Empty body', { status: 400 });
-  getDb()
-    .prepare(`
-      INSERT INTO clips(key, mime, data, updated_at) VALUES(?, ?, ?, ?)
-      ON CONFLICT(key) DO UPDATE SET mime=excluded.mime, data=excluded.data, updated_at=excluded.updated_at
-    `)
-    .run(key, mime, buf, Date.now());
-  return NextResponse.json({ ok: true, size: buf.length });
+  try {
+    const { url } = await putClip(key, buf, mime);
+    return NextResponse.json({ ok: true, size: buf.length, url });
+  } catch (e) {
+    console.error('putClip failed:', e);
+    return NextResponse.json({ ok: false, error: String(e && e.message || e) }, { status: 500 });
+  }
 }
 
 export async function DELETE(_req, { params }) {
   const key = decodeURIComponent(params.key);
-  getDb().prepare('DELETE FROM clips WHERE key = ?').run(key);
-  return NextResponse.json({ ok: true });
+  try {
+    await delClip(key);
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: String(e && e.message || e) }, { status: 500 });
+  }
 }
