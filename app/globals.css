@@ -77,6 +77,18 @@ button { font-family: inherit; cursor: pointer; border: none; }
 .voice-note { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center;
   font-size: 0.75rem; color: #888; pointer-events: none; }
 
+.home-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; justify-content: center; }
+.music-toggle { background: white; border-radius: 999px; width: 48px; height: 48px;
+  font-size: 1.4rem; box-shadow: 0 4px 0 rgba(0,0,0,0.1); transition: transform 0.1s; }
+.music-toggle:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,0.1); }
+
+.lang-toggle { display: inline-flex; background: white; border-radius: 999px; padding: 4px;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.1); gap: 4px; }
+.lang-toggle button { background: transparent; color: #888; font-weight: bold; padding: 8px 18px;
+  border-radius: 999px; font-size: clamp(0.85rem, 2.2vw, 1rem); transition: all 0.15s; }
+.lang-toggle button.on { background: #d63384; color: white; box-shadow: 0 2px 0 rgba(0,0,0,0.15); }
+.lang-toggle button:not(.on):active { background: #f8f0f4; }
+
 .parent-btn { margin-top: 8px; background: #fff3bf; color: #5c3a00; font-weight: bold;
   padding: 14px 22px; border-radius: 22px; box-shadow: 0 4px 0 rgba(0,0,0,0.15);
   font-size: clamp(0.9rem, 2.4vw, 1.1rem); }

@@ -1,15 +1,42 @@
 'use client';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, createContext, useContext, Component } from 'react';
 import {
   ANIMALS, FRUITS, VEHICLES, BODY, COLORS, NUM_WORDS, NUM_EMOJI, CHEERS, NOTES,
+  STRINGS, labelOf, sayOf,
 } from './data';
 import {
   getCtx, loadVoices, loadRecordedIndex,
   speak, cancelSpeak, playTone, playPop,
-  uploadClip, deleteClip, hasRecording, recordedKeysSnapshot,
+  uploadClip, deleteClip, recordedKeysSnapshot,
 } from './audio';
+import { startMusic, stopMusic } from './bgMusic';
 
-const cheerOf = () => CHEERS[Math.floor(Math.random() * CHEERS.length)];
+// ---------- Error boundary ----------
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) { console.error('ErrorBoundary caught:', err, info); }
+  render() {
+    if (this.state.err) {
+      return (
+        <div style={{ padding: 80, fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+          <h3 style={{ color: '#c92a2a' }}>Something broke:</h3>
+          <div>{String(this.state.err && (this.state.err.stack || this.state.err.message || this.state.err))}</div>
+          <button style={{ marginTop: 20, padding: '10px 20px' }} onClick={() => this.setState({ err: null })}>Retry</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ---------- Language context ----------
+const LangCtx = createContext({ lang: 'hi', setLang: () => {} });
+const useLang = () => useContext(LangCtx);
+const cheerOf = (lang) => {
+  const arr = CHEERS[lang];
+  return arr[Math.floor(Math.random() * arr.length)];
+};
 
 // ---------- Cheer overlay ----------
 function Cheer({ text, onDone }) {
@@ -20,34 +47,59 @@ function Cheer({ text, onDone }) {
   return <div className="cheer">{text}</div>;
 }
 
-// ---------- Home ----------
-function Home({ onPick }) {
+// ---------- Language toggle ----------
+function LangToggle() {
+  const { lang, setLang } = useLang();
   return (
-    <div className="home">
-      <h1>नमस्ते अक्षिता! 🌸</h1>
-      <div className="menu">
-        <button className="m1" onClick={() => onPick('animals')}><span className="emoji">🐶</span>जानवर</button>
-        <button className="m2" onClick={() => onPick('balloons')}><span className="emoji">🎈</span>गुब्बारे</button>
-        <button className="m3" onClick={() => onPick('colors')}><span className="emoji">🎨</span>रंग</button>
-        <button className="m4" onClick={() => onPick('music')}><span className="emoji">🎵</span>संगीत</button>
-        <button className="m5" onClick={() => onPick('numbers')}><span className="emoji">🔢</span>गिनती</button>
-        <button className="m6" onClick={() => onPick('fruits')}><span className="emoji">🍎</span>फल</button>
-        <button className="m7" onClick={() => onPick('vehicles')}><span className="emoji">🚗</span>गाड़ियाँ</button>
-        <button className="m8" onClick={() => onPick('body')}><span className="emoji">👁️</span>शरीर</button>
-      </div>
-      <button className="parent-btn" onClick={() => onPick('parent')}>
-        🎤 अपनी आवाज़ रिकॉर्ड करें (Parent mode)
-      </button>
+    <div className="lang-toggle">
+      <button className={lang === 'hi' ? 'on' : ''} onClick={() => setLang('hi')}>हिंदी</button>
+      <button className={lang === 'en' ? 'on' : ''} onClick={() => setLang('en')}>English</button>
     </div>
   );
 }
 
-// ---------- TapSpeakGrid (animals/fruits/vehicles/body) ----------
+// ---------- Music toggle ----------
+function MusicToggle({ on, onToggle }) {
+  return (
+    <button className="music-toggle" onClick={onToggle} title={on ? 'Music on' : 'Music off'}>
+      {on ? '🎵' : '🔇'}
+    </button>
+  );
+}
+
+// ---------- Home ----------
+function Home({ onPick, musicOn, onToggleMusic }) {
+  const { lang } = useLang();
+  const t = STRINGS[lang];
+  return (
+    <div className="home">
+      <div className="home-header">
+        <LangToggle />
+        <MusicToggle on={musicOn} onToggle={onToggleMusic} />
+      </div>
+      <h1>{t.greeting}</h1>
+      <div className="menu">
+        <button className="m1" onClick={() => onPick('animals')}><span className="emoji">🐶</span>{t.menu.animals}</button>
+        <button className="m2" onClick={() => onPick('balloons')}><span className="emoji">🎈</span>{t.menu.balloons}</button>
+        <button className="m3" onClick={() => onPick('colors')}><span className="emoji">🎨</span>{t.menu.colors}</button>
+        <button className="m4" onClick={() => onPick('music')}><span className="emoji">🎵</span>{t.menu.music}</button>
+        <button className="m5" onClick={() => onPick('numbers')}><span className="emoji">🔢</span>{t.menu.numbers}</button>
+        <button className="m6" onClick={() => onPick('fruits')}><span className="emoji">🍎</span>{t.menu.fruits}</button>
+        <button className="m7" onClick={() => onPick('vehicles')}><span className="emoji">🚗</span>{t.menu.vehicles}</button>
+        <button className="m8" onClick={() => onPick('body')}><span className="emoji">👁️</span>{t.menu.body}</button>
+      </div>
+      <button className="parent-btn" onClick={() => onPick('parent')}>{t.parentBtn}</button>
+    </div>
+  );
+}
+
+// ---------- TapSpeakGrid ----------
 function TapSpeakGrid({ items, cols = 3 }) {
+  const { lang } = useLang();
   const [picked, setPicked] = useState(null);
   const onTap = (it) => {
     setPicked(it);
-    speak(it.say || it.hi);
+    speak(sayOf(it, lang), lang);
     setTimeout(() => setPicked(null), 2000);
   };
   return (
@@ -56,14 +108,14 @@ function TapSpeakGrid({ items, cols = 3 }) {
         {items.map((it, i) => (
           <button key={i} className="tap-btn" onClick={() => onTap(it)}>
             <span>{it.e}</span>
-            <span className="label">{it.hi}</span>
+            <span className="label">{labelOf(it, lang)}</span>
           </button>
         ))}
       </div>
       {picked && (
         <div className="big-overlay">
           <div className="e">{picked.e}</div>
-          <div className="label">{picked.hi}</div>
+          <div className="label">{labelOf(picked, lang)}</div>
         </div>
       )}
     </div>
@@ -72,6 +124,7 @@ function TapSpeakGrid({ items, cols = 3 }) {
 
 // ---------- Balloons ----------
 function Balloons() {
+  const { lang } = useLang();
   const [balloons, setBalloons] = useState([]);
   const [bursts, setBursts] = useState([]);
   const [score, setScore] = useState(0);
@@ -100,9 +153,9 @@ function Balloons() {
     setScore(s => {
       const ns = s + 1;
       if (ns % 5 === 0) {
-        const c = cheerOf();
+        const c = cheerOf(lang);
         setCheer(c);
-        speak(c);
+        speak(c, lang);
       }
       return ns;
     });
@@ -156,42 +209,44 @@ function pickN(arr, n, must) {
   return out.sort(() => Math.random() - 0.5);
 }
 function ColorMatch() {
+  const { lang } = useLang();
+  const t = STRINGS[lang];
   const [target, setTarget] = useState(() => COLORS[0]);
   const [options, setOptions] = useState(() => pickN(COLORS, 3, COLORS[0]));
-  const [wrongId, setWrongId] = useState(null);
+  const [wrongKey, setWrongKey] = useState(null);
   const [cheer, setCheer] = useState(null);
 
   const next = useCallback(() => {
-    const t = pick(COLORS);
-    setTarget(t);
-    setOptions(pickN(COLORS, 3, t));
+    const nx = pick(COLORS);
+    setTarget(nx);
+    setOptions(pickN(COLORS, 3, nx));
   }, []);
-  useEffect(() => { speak(`${target.hi} ढूँढो`); }, [target]);
+  useEffect(() => { speak(t.findXSay(target), lang); }, [target, lang]);
 
   const choose = (c) => {
     if (c.hi === target.hi) {
       playTone(660, 0.2); setTimeout(() => playTone(880, 0.3), 150);
-      const cc = cheerOf();
+      const cc = cheerOf(lang);
       setCheer(cc);
-      speak(target.hi);
-      setTimeout(() => speak(cc), 600);
-      setTimeout(next, 1700);
+      speak(labelOf(target, lang), lang);
+      setTimeout(() => speak(cc, lang), 700);
+      setTimeout(next, 1800);
     } else {
       playTone(200, 0.3, 'sawtooth');
-      setWrongId(c.hi);
-      setTimeout(() => setWrongId(null), 400);
+      setWrongKey(c.hi);
+      setTimeout(() => setWrongKey(null), 400);
     }
   };
 
   return (
     <div className="stage">
-      <div className="prompt">{target.hi} ढूँढो!</div>
+      <div className="prompt">{t.findX(target)}</div>
       <div className="color-shape" style={{ color: target.hex }}>⬤</div>
       <div className="color-options">
         {options.map(c => (
           <div
             key={c.hi}
-            className={`color-circle ${wrongId === c.hi ? 'wrong' : ''}`}
+            className={`color-circle ${wrongKey === c.hi ? 'wrong' : ''}`}
             style={{ background: c.hex }}
             onClick={() => choose(c)}
           />
@@ -222,17 +277,20 @@ function Music() {
 
 // ---------- Numbers ----------
 function Numbers() {
+  const { lang } = useLang();
+  const t = STRINGS[lang];
+  const words = NUM_WORDS[lang];
   const [n, setN] = useState(1);
   const [showCheer, setShowCheer] = useState(null);
   const tap = () => {
     const next = n >= 10 ? 1 : n + 1;
     setN(next);
-    speak(NUM_WORDS[next]);
+    speak(words[next], lang);
     if (next === 10) {
       setTimeout(() => {
-        const c = cheerOf();
+        const c = cheerOf(lang);
         setShowCheer(c);
-        speak(c);
+        speak(c, lang);
       }, 700);
     }
   };
@@ -241,35 +299,38 @@ function Numbers() {
     <div className="stage" onClick={tap} style={{ cursor: 'pointer' }}>
       <div className="num-display" key={n}>{n}</div>
       <div className="num-items">{emoji.repeat(n)}</div>
-      <div className="num-items" style={{ color: '#d63384', marginTop: 6 }}>{NUM_WORDS[n]}</div>
-      <div className="num-tap">कहीं भी छुओ ✨</div>
+      <div className="num-items" style={{ color: '#d63384', marginTop: 6 }}>{words[n]}</div>
+      <div className="num-tap">{t.numTap}</div>
       {showCheer && <Cheer text={showCheer} onDone={() => setShowCheer(null)} />}
     </div>
   );
 }
 
 // ---------- Parent record mode ----------
-function buildVoiceLibrary() {
+function buildVoiceLibrary(lang) {
   return [
-    { title: '🐶 जानवर', items: ANIMALS.map(a => ({ label: a.hi, emoji: a.e, text: a.say })) },
-    { title: '🍎 फल', items: FRUITS.map(f => ({ label: f.hi, emoji: f.e, text: f.hi })) },
-    { title: '🚗 गाड़ियाँ', items: VEHICLES.map(v => ({ label: v.hi, emoji: v.e, text: v.say })) },
-    { title: '👁️ शरीर', items: BODY.map(b => ({ label: b.hi, emoji: b.e, text: b.hi })) },
-    { title: '🎨 रंग', items: COLORS.flatMap(c => [
-        { label: c.hi, emoji: '⬤', text: c.hi, color: c.hex },
-        { label: `${c.hi} ढूँढो`, emoji: '🔍', text: `${c.hi} ढूँढो`, color: c.hex },
+    { title: '🐶 ' + STRINGS[lang].menu.animals,  items: ANIMALS.map(a  => ({ label: labelOf(a, lang), emoji: a.e,        text: sayOf(a, lang) })) },
+    { title: '🍎 ' + STRINGS[lang].menu.fruits,   items: FRUITS.map(f   => ({ label: labelOf(f, lang), emoji: f.e,        text: labelOf(f, lang) })) },
+    { title: '🚗 ' + STRINGS[lang].menu.vehicles, items: VEHICLES.map(v => ({ label: labelOf(v, lang), emoji: v.e,        text: sayOf(v, lang) })) },
+    { title: '👁️ ' + STRINGS[lang].menu.body,     items: BODY.map(b     => ({ label: labelOf(b, lang), emoji: b.e,        text: labelOf(b, lang) })) },
+    { title: '🎨 ' + STRINGS[lang].menu.colors,   items: COLORS.flatMap(c => [
+        { label: labelOf(c, lang), emoji: '⬤', text: labelOf(c, lang), color: c.hex },
+        { label: STRINGS[lang].findXSay(c), emoji: '🔍', text: STRINGS[lang].findXSay(c), color: c.hex },
       ]) },
-    { title: '🔢 गिनती', items: NUM_WORDS.slice(1).map((w, i) => ({ label: w, emoji: String(i + 1), text: w })) },
-    { title: '🌟 तारीफ़', items: CHEERS.map(c => ({ label: c, emoji: '🌟', text: c })) },
+    { title: '🔢 ' + STRINGS[lang].menu.numbers,  items: NUM_WORDS[lang].slice(1).map((w, i) => ({ label: w, emoji: String(i + 1), text: w })) },
+    { title: '🌟 ' + (lang === 'hi' ? 'तारीफ़' : 'Praise'), items: CHEERS[lang].map(c => ({ label: c, emoji: '🌟', text: c })) },
   ];
 }
 
 function ParentMode() {
-  const [groups] = useState(buildVoiceLibrary);
+  const { lang } = useLang();
+  const t = STRINGS[lang];
+  const [groups, setGroups] = useState(() => buildVoiceLibrary(lang));
   const [recordingKey, setRecordingKey] = useState(null);
   const [recorded, setRecorded] = useState(new Set());
   const mediaRef = useRef({ recorder: null, chunks: [], stream: null });
 
+  useEffect(() => { setGroups(buildVoiceLibrary(lang)); }, [lang]);
   useEffect(() => {
     loadRecordedIndex().then(() => setRecorded(new Set(recordedKeysSnapshot())));
   }, []);
@@ -286,7 +347,7 @@ function ParentMode() {
       const chunks = [];
       rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
       rec.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach(tr => tr.stop());
         const blob = new Blob(chunks, { type: mime });
         await uploadClip(key, blob);
         mediaRef.current = { recorder: null, chunks: [], stream: null };
@@ -311,13 +372,11 @@ function ParentMode() {
 
   return (
     <div className="parent-stage">
-      <h2 style={{ textAlign: 'center', color: '#d63384', margin: '10px 0' }}>
-        🎤 Record your voice for Akshita
-      </h2>
-      <p style={{ textAlign: 'center', color: '#666', margin: '0 0 20px', fontSize: '0.95rem' }}>
-        Tap 🎤 to record your voice for each word. The app will play your voice instead of TTS.
-        Clips are saved to SQLite on the server.
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+        <LangToggle />
+      </div>
+      <h2 style={{ textAlign: 'center', color: '#d63384', margin: '10px 0' }}>{t.parentTitle}</h2>
+      <p style={{ textAlign: 'center', color: '#666', margin: '0 0 20px', fontSize: '0.95rem' }}>{t.parentDesc}</p>
       {groups.map(g => (
         <div key={g.title} className="parent-group">
           <h3>{g.title}</h3>
@@ -327,13 +386,13 @@ function ParentMode() {
               const isRec = recordingKey === it.text;
               return (
                 <div key={it.text} className={`parent-row ${isRec ? 'rec' : ''}`}>
-                  <span className="pr-emoji" style={it.color ? { color: it.color } : null}>{it.emoji}</span>
+                  <span className="pr-emoji" style={it.color ? { color: it.color } : undefined}>{it.emoji}</span>
                   <span className="pr-label">{it.label}</span>
                   <span className={`pr-dot ${has ? 'on' : ''}`} title={has ? 'Recorded' : 'Not recorded'}>●</span>
                   {!isRec
                     ? <button className="pr-btn rec" onClick={() => startRec(it.text)}>🎤</button>
                     : <button className="pr-btn stop" onClick={stopRec}>⏹</button>}
-                  <button className="pr-btn" disabled={!has} onClick={() => speak(it.text)}>▶️</button>
+                  <button className="pr-btn" disabled={!has} onClick={() => speak(it.text, lang)}>▶️</button>
                   <button className="pr-btn" disabled={!has} onClick={() => delRec(it.text)}>🗑</button>
                 </div>
               );
@@ -348,16 +407,49 @@ function ParentMode() {
 
 // ---------- App ----------
 export default function Games() {
+  const [lang, setLangState] = useState('hi');
   const [view, setView] = useState('home');
-  useEffect(() => { loadRecordedIndex(); }, []);
-  const go = (v) => { getCtx(); loadVoices(); setView(v); };
+  const [musicOn, setMusicOn] = useState(true);
+
+  useEffect(() => {
+    try {
+      const savedLang = localStorage.getItem('lang');
+      if (savedLang === 'hi' || savedLang === 'en') setLangState(savedLang);
+      const savedMusic = localStorage.getItem('music');
+      if (savedMusic === '0') setMusicOn(false);
+    } catch (e) {}
+    loadRecordedIndex();
+  }, []);
+
+  const setLang = (l) => {
+    setLangState(l);
+    try { localStorage.setItem('lang', l); } catch (e) {}
+    if (musicOn) startMusic();
+  };
+
+  const toggleMusic = () => {
+    setMusicOn(prev => {
+      const next = !prev;
+      if (next) startMusic(); else stopMusic();
+      try { localStorage.setItem('music', next ? '1' : '0'); } catch (e) {}
+      return next;
+    });
+  };
+
+  const go = (v) => {
+    getCtx();
+    loadVoices();
+    if (musicOn) startMusic();
+    setView(v);
+  };
   const home = () => { cancelSpeak(); setView('home'); };
+
   return (
-    <>
+    <LangCtx.Provider value={{ lang, setLang }}>
       {view !== 'home' && (
         <button className="back" onClick={home}>🏠</button>
       )}
-      {view === 'home' && <Home onPick={go} />}
+      {view === 'home' && <Home onPick={go} musicOn={musicOn} onToggleMusic={toggleMusic} />}
       {view === 'animals' && <TapSpeakGrid items={ANIMALS} />}
       {view === 'fruits' && <TapSpeakGrid items={FRUITS} />}
       {view === 'vehicles' && <TapSpeakGrid items={VEHICLES} />}
@@ -366,10 +458,10 @@ export default function Games() {
       {view === 'colors' && <ColorMatch />}
       {view === 'music' && <Music />}
       {view === 'numbers' && <Numbers />}
-      {view === 'parent' && <ParentMode />}
+      {view === 'parent' && <ErrorBoundary><ParentMode /></ErrorBoundary>}
       {view !== 'parent' && (
-        <div className="voice-note">Tip: Record your own voice in Parent mode for best quality 🎤</div>
+        <div className="voice-note">{STRINGS[lang].voiceTip}</div>
       )}
-    </>
+    </LangCtx.Provider>
   );
 }
